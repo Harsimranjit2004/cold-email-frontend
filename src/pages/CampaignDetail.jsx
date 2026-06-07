@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   getCampaign, getLeads, addLeadsToCampaign,
   getPendingApprovals, approveEmail, approveAllEmails,
-  sendEmailNow, updateCampaignStatus, getResumes
+  sendEmailNow, updateCampaignStatus
 } from '../services/api'
 
 const STATUS_COLORS = {
@@ -15,16 +15,32 @@ const STATUS_COLORS = {
   cancelled:        { color: '#555',    bg: '#1a1a1a' },
 }
 
+// Render the campaign's sequence in the header:
+//   "Email 1 · Email 2 +2d 📎 · Email 3 +5d"
+function SequenceLine({ sequence }) {
+  if (!sequence?.length) return null
+  return (
+    <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+      {sequence.map((s, i) => (
+        <span key={s.step} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          {i > 0 && <span style={{ color: 'var(--text-3)' }}>·</span>}
+          <span>Email {s.step}</span>
+          {s.step > 1 && <span style={{ color: 'var(--text-3)' }}>+{s.delay_days}d</span>}
+          {s.attach_resume && <span title='Attaches resume'>📎</span>}
+        </span>
+      ))}
+    </span>
+  )
+}
+
 export default function CampaignDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [campaign, setCampaign] = useState(null)
   const [emails, setEmails] = useState([])
   const [leads, setLeads] = useState([])
-  const [resumes, setResumes] = useState([])
   const [loading, setLoading] = useState(true)
   const [selectedLeads, setSelectedLeads] = useState([])
-  const [attachResume, setAttachResume] = useState(false)
   const [scheduleStart, setScheduleStart] = useState('')
   const [adding, setAdding] = useState(false)
   const [showAddLeads, setShowAddLeads] = useState(false)
@@ -34,7 +50,6 @@ export default function CampaignDetail() {
   useEffect(() => {
     loadCampaign()
     loadLeads()
-    loadResumes()
   }, [id])
 
   const loadCampaign = async () => {
@@ -54,23 +69,16 @@ export default function CampaignDetail() {
     } catch (e) { console.error(e) }
   }
 
-  const loadResumes = async () => {
-    try {
-      const res = await getResumes()
-      setResumes(res.data)
-    } catch (e) { console.error(e) }
-  }
-
   const handleAddLeads = async () => {
     if (!selectedLeads.length) return
     setAdding(true)
     try {
       await addLeadsToCampaign(id, {
         lead_ids: selectedLeads,
-        attach_resume: attachResume,
         schedule_start: scheduleStart || undefined
       })
       setSelectedLeads([])
+      setScheduleStart('')
       setShowAddLeads(false)
       loadCampaign()
     } catch (e) { console.error(e) }
@@ -116,7 +124,6 @@ export default function CampaignDetail() {
 
   const pendingApprovals = emails.filter(e => e.status === 'pending_approval')
   const sentEmails = emails.filter(e => e.status === 'sent')
-  const pendingEmails = emails.filter(e => e.status === 'pending')
 
   if (loading) return (
     <div style={{ color: 'var(--text-3)', fontFamily: 'var(--mono)', fontSize: 12 }}>LOADING...</div>
@@ -144,8 +151,8 @@ export default function CampaignDetail() {
           <h1 style={{ ...mono, fontSize: 16, letterSpacing: 2, color: 'var(--text)' }}>
             {campaign.name.toUpperCase()}
           </h1>
-          <div style={{ display: 'flex', gap: 16, marginTop: 6, fontSize: 11, color: 'var(--text-3)', ...mono }}>
-            <span>Follow-ups: day {campaign.follow_up_days?.join(', ')}</span>
+          <div style={{ display: 'flex', gap: 16, marginTop: 6, fontSize: 11, color: 'var(--text-3)', ...mono, flexWrap: 'wrap' }}>
+            <SequenceLine sequence={campaign.sequence} />
             {campaign.resume_filename && <span>📎 {campaign.resume_filename}</span>}
           </div>
         </div>
@@ -156,7 +163,7 @@ export default function CampaignDetail() {
               padding: '6px 12px', borderRadius: 4, fontSize: 11, ...mono,
               cursor: 'pointer', letterSpacing: 1,
               background: campaign.status === s ? 'var(--accent)' : 'var(--bg-3)',
-              color: campaign.status === s ? '#000' : 'var(--text-3)',
+              color: campaign.status === s ? '#fff' : 'var(--text-3)',
               border: `1px solid ${campaign.status === s ? 'var(--accent)' : 'var(--border)'}`,
             }}>{s.toUpperCase()}</button>
           ))}
@@ -223,16 +230,6 @@ export default function CampaignDetail() {
             </div>
 
             <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-2)', cursor: 'pointer' }}>
-                <input
-                  type='checkbox'
-                  checked={attachResume}
-                  onChange={e => setAttachResume(e.target.checked)}
-                  style={{ accentColor: 'var(--accent)' }}
-                />
-                Attach resume
-              </label>
-
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 11, color: 'var(--text-3)', ...mono }}>SCHEDULE START:</span>
                 <input
@@ -246,13 +243,16 @@ export default function CampaignDetail() {
                   }}
                 />
               </div>
+              <span style={{ fontSize: 11, color: 'var(--text-3)', ...mono }}>
+                Resume policy comes from the campaign sequence — set it on the campaign, not here.
+              </span>
             </div>
 
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={handleAddLeads} disabled={adding || !selectedLeads.length} style={{
                 background: selectedLeads.length ? 'var(--accent)' : 'var(--bg-3)',
                 border: 'none', borderRadius: 4, padding: '8px 16px',
-                color: selectedLeads.length ? '#000' : 'var(--text-3)',
+                color: selectedLeads.length ? '#fff' : 'var(--text-3)',
                 ...mono, fontSize: 12, cursor: selectedLeads.length ? 'pointer' : 'not-allowed', fontWeight: 700
               }}>
                 {adding ? 'GENERATING...' : `ADD ${selectedLeads.length} LEADS →`}
@@ -346,7 +346,7 @@ export default function CampaignDetail() {
               <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                 <button onClick={() => handleApprove(email.id)} style={{
                   background: 'var(--accent)', border: 'none', borderRadius: 4,
-                  padding: '6px 14px', color: '#000', ...mono,
+                  padding: '6px 14px', color: '#fff', ...mono,
                   fontSize: 11, cursor: 'pointer', fontWeight: 700
                 }}>APPROVE</button>
 
@@ -403,6 +403,7 @@ export default function CampaignDetail() {
                     </td>
                     <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-3)', ...mono }}>
                       {email.sequence_step}
+                      {email.attach_resume && <span title='Attaches resume' style={{ marginLeft: 4 }}>📎</span>}
                     </td>
                     <td style={{ padding: '10px 12px' }}>
                       <span style={{
