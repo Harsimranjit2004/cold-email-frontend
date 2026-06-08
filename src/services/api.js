@@ -1,16 +1,15 @@
 import axios from 'axios'
-
 const api = axios.create({
-  baseURL: 'https://cold-email-system-z6fn.onrender.com',
+  baseURL: 'https://leadgen.harsimrandosanjh.com',
   headers: { 'Content-Type': 'application/json' }
 })
-
 // Leads
 export const searchLeads = (params) => api.post('/leads/search', params)
 export const getLeads = (status = null) => api.get('/leads/', { params: status ? { status } : {} })
 export const updateLead = (id, data) => api.patch(`/leads/${id}`, data)
 export const deleteLead = (id) => api.delete(`/leads/${id}`)
-export const exportCSV = () => window.open('https://cold-email-system-z6fn.onrender.com/leads/export/csv', '_blank')
+export const exportCSV = () =>
+  window.open('https://leadgen.harsimrandosanjh.com/leads/export/csv', '_blank')
 // Campaigns
 export const getCampaigns = () => api.get('/campaigns/')
 export const getCampaign = (id) => api.get(`/campaigns/${id}`)
